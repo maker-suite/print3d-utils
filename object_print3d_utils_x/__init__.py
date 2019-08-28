@@ -57,6 +57,10 @@ else:
             )
 
 
+def print3d_check_overhang(self, context):
+    bpy.ops.mesh.print3d_check_overhang()
+
+
 class Print3D_Scene_Props(PropertyGroup):
     export_format: EnumProperty(
         name="Format",
@@ -117,6 +121,12 @@ class Print3D_Scene_Props(PropertyGroup):
         subtype='ANGLE',
         default=math.radians(45.0),
         min=0.0, max=math.radians(90.0),
+    )
+    check_overhang: BoolProperty(
+        name="Check Overhang",
+        description="Check overhang faces",
+        default=False,
+        update=print3d_check_overhang,
     )
 
 

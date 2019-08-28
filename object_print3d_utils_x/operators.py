@@ -316,9 +316,10 @@ class MESH_OT_Print3D_Check_Overhang(Operator):
         bm = mesh_helpers.bmesh_from_object(obj)
         for ele in bm.faces:
             ele.material_index = 0
-        bm.faces.ensure_lookup_table()
-        for i in faces_overhang:
-            bm.faces[i].material_index = 1
+        if print_3d.check_overhang:
+            bm.faces.ensure_lookup_table()
+            for i in faces_overhang:
+                bm.faces[i].material_index = 1
         mesh_helpers.bmesh_to_object(obj, bm)
         bm.free()
 
