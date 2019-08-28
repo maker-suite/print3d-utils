@@ -122,6 +122,78 @@ def multiple_obj_warning(self, context):
         self.report({"INFO"}, "Multiple selected objects. Only the active one will be evaluated")
 
 
+def print3d_get_faces_distort(obj):
+    scene = bpy.context.scene
+    print_3d = scene.print_3d
+    if not print_3d.check_distort:
+        return []
+    angle_distort = print_3d.angle_distort
+
+    bm = mesh_helpers.bmesh_copy_from_object(obj, transform=True, triangulate=False)
+    bm.normal_update()
+
+    faces_distort = [ele.index for ele in bm.faces
+                    if mesh_helpers.face_is_distorted(ele, angle_distort)]
+    bm.free()
+    return faces_distort
+
+
+def print3d_get_faces_overhang(obj):
+    import math
+    from mathutils import Vector
+
+    scene = bpy.context.scene
+    print_3d = scene.print_3d
+    if not print_3d.check_overhang:
+        return []
+    angle_overhang = (math.pi / 2.0) - print_3d.angle_overhang
+
+    if angle_overhang == math.pi:
+        return []
+
+    bm = mesh_helpers.bmesh_copy_from_object(obj, transform=True, triangulate=False)
+    bm.normal_update()
+
+    z_down = Vector((0, 0, -1.0))
+    z_down_angle = z_down.angle
+
+    # 4.0 ignores zero area faces
+    faces_overhang = [ele.index for ele in bm.faces
+                      if z_down_angle(ele.normal, 4.0) < angle_overhang]
+    bm.free()
+    return faces_overhang
+
+
+def print3d_color_faces(obj, faces):
+        if 'print3d_info' in bpy.data.materials:
+            infomat = bpy.data.materials['print3d_info']
+        else:
+            infomat = bpy.data.materials.new('print3d_info')
+            infomat.diffuse_color[1] = 0.1
+            infomat.diffuse_color[2] = 0.1
+
+        infomat_index = obj.data.materials.find('print3d_info')
+        if infomat_index < 0:
+            obj.data.materials.append(infomat)
+            infomat_index = obj.data.materials.find('print3d_info')
+
+        bm = mesh_helpers.bmesh_from_object(obj)
+        for ele in bm.faces:
+            ele.material_index = 0
+        bm.faces.ensure_lookup_table()
+        for i in faces:
+            bm.faces[i].material_index = infomat_index
+        mesh_helpers.bmesh_to_object(obj, bm)
+        bm.free()
+
+
+def print3d_check_faces(self, context):
+    obj = context.active_object
+    faces_distort = print3d_get_faces_distort(obj)
+    faces_overhang = print3d_get_faces_overhang(obj)
+    print3d_color_faces(obj, faces_distort + faces_overhang)
+
+
 class MESH_OT_Print3D_Check_Solid(Operator):
     """Check for geometry is solid (has valid inside/outside) and correct normals"""
     bl_idname = "mesh.print3d_check_solid"
@@ -203,24 +275,9 @@ class MESH_OT_Print3D_Check_Distorted(Operator):
 
     @staticmethod
     def main_check(obj, info):
-        import array
-
-        scene = bpy.context.scene
-        print_3d = scene.print_3d
-        angle_distort = print_3d.angle_distort
-
-        bm = mesh_helpers.bmesh_copy_from_object(obj, transform=True, triangulate=False)
-        bm.normal_update()
-
-        faces_distort = array.array(
-                'i',
-                (i for i, ele in enumerate(bm.faces) if mesh_helpers.face_is_distorted(ele, angle_distort))
-                )
-
+        faces_distort = print3d_get_faces_distort(obj)
         info.append(("Non-Flat Faces: %d" % len(faces_distort),
                     (bmesh.types.BMFace, faces_distort)))
-
-        bm.free()
 
     def execute(self, context):
         return execute_check(self, context)
@@ -278,50 +335,9 @@ class MESH_OT_Print3D_Check_Overhang(Operator):
 
     @staticmethod
     def main_check(obj, info):
-        import math
-        from mathutils import Vector
-
-        scene = bpy.context.scene
-        print_3d = scene.print_3d
-        angle_overhang = (math.pi / 2.0) - print_3d.angle_overhang
-
-        if angle_overhang == math.pi:
-            info.append(("Skipping Overhang", ()))
-            return
-
-        bm = mesh_helpers.bmesh_copy_from_object(obj, transform=True, triangulate=False)
-        bm.normal_update()
-
-        z_down = Vector((0, 0, -1.0))
-        z_down_angle = z_down.angle
-
-        # 4.0 ignores zero area faces
-        faces_overhang = [ele.index for ele in bm.faces
-                          if z_down_angle(ele.normal, 4.0) < angle_overhang]
-
+        faces_overhang = print3d_get_faces_overhang(obj)
         info.append(("Overhang Face: %d" % len(faces_overhang),
                     (bmesh.types.BMFace, faces_overhang)))
-        bm.free()
-
-        if 'print3d_info' in bpy.data.materials:
-            infomat = bpy.data.materials['print3d_info']
-        else:
-            infomat = bpy.data.materials.new('print3d_info')
-            infomat.diffuse_color[1] = 0.1
-            infomat.diffuse_color[2] = 0.1
-
-        if 'print3d_info' not in obj.data.materials:
-            obj.data.materials.append(infomat)
-
-        bm = mesh_helpers.bmesh_from_object(obj)
-        for ele in bm.faces:
-            ele.material_index = 0
-        if print_3d.check_overhang:
-            bm.faces.ensure_lookup_table()
-            for i in faces_overhang:
-                bm.faces[i].material_index = 1
-        mesh_helpers.bmesh_to_object(obj, bm)
-        bm.free()
 
     def execute(self, context):
         return execute_check(self, context)
@@ -344,6 +360,9 @@ class MESH_OT_Print3D_Check_All(Operator):
 
     def execute(self, context):
         obj = context.active_object
+        print_3d = context.scene.print_3d
+        print_3d.check_distort = True
+        print_3d.check_overhang = True
 
         info = []
         for cls in self.check_cls:

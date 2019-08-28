@@ -87,7 +87,7 @@ class Print3D_ToolBar:
         rowsub.operator("mesh.print3d_check_degenerate", text="Degenerate", icon="BLANK1")
         rowsub.prop(print_3d, "threshold_zero", text="")
         rowsub = col.row(align=True)
-        rowsub.operator("mesh.print3d_check_distort", text="Distorted", icon="BLANK1")
+        rowsub.prop(print_3d, "check_distort", text="Distorted", icon="BLANK1")
         rowsub.prop(print_3d, "angle_distort", text="")
         rowsub = col.row(align=True)
         rowsub.operator("mesh.print3d_check_thick", text="Thickness", icon="BLANK1")
