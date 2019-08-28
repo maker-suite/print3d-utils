@@ -303,6 +303,25 @@ class MESH_OT_Print3D_Check_Overhang(Operator):
                     (bmesh.types.BMFace, faces_overhang)))
         bm.free()
 
+        if 'print3d_info' in bpy.data.materials:
+            infomat = bpy.data.materials['print3d_info']
+        else:
+            infomat = bpy.data.materials.new('print3d_info')
+            infomat.diffuse_color[1] = 0.1
+            infomat.diffuse_color[2] = 0.1
+
+        if 'print3d_info' not in obj.data.materials:
+            obj.data.materials.append(infomat)
+
+        bm = mesh_helpers.bmesh_from_object(obj)
+        for ele in bm.faces:
+            ele.material_index = 0
+        bm.faces.ensure_lookup_table()
+        for i in faces_overhang:
+            bm.faces[i].material_index = 1
+        mesh_helpers.bmesh_to_object(obj, bm)
+        bm.free()
+
     def execute(self, context):
         return execute_check(self, context)
 
